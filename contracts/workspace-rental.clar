@@ -55,3 +55,115 @@
     (asserts! (<= new-reservation (var-get workspace-reservation-limit)) err-reservation-limit-exceeded)
     (var-set current-reserved-space new-reservation)
     (ok true)))
+
+;; Public functions
+
+;; Set workspace price (only platform owner)
+(define-public (set-workspace-price (new-price uint))
+  (begin
+    (asserts! (is-eq tx-sender platform-owner) err-owner-only)
+    (asserts! (> new-price u0) err-invalid-price) ;; Ensure price is greater than 0
+    (var-set workspace-price new-price)
+    (ok true)))
+
+;; Set commission rate (only platform owner)
+(define-public (set-commission-rate (new-rate uint))
+  (begin
+    (asserts! (is-eq tx-sender platform-owner) err-owner-only)
+    (asserts! (<= new-rate u100) err-invalid-fee) ;; Ensure rate is not more than 100%
+    (var-set commission-rate new-rate)
+    (ok true)))
+
+;; Set refund rate (only platform owner)
+(define-public (set-refund-rate (new-rate uint))
+  (begin
+    (asserts! (is-eq tx-sender platform-owner) err-owner-only)
+    (asserts! (<= new-rate u100) err-invalid-fee) ;; Ensure rate is not more than 100%
+    (var-set refund-rate new-rate)
+    (ok true)))
+
+;; Set workspace reservation limit (only platform owner)
+(define-public (set-workspace-reservation-limit (new-limit uint))
+  (begin
+    (asserts! (is-eq tx-sender platform-owner) err-owner-only)
+    (asserts! (>= new-limit (var-get current-reserved-space)) err-invalid-reservation-limit)
+    (var-set workspace-reservation-limit new-limit)
+    (ok true)))
+
+;; Add workspace for rent
+(define-public (add-workspace-for-rent (hours uint) (price uint))
+  (let (
+    (current-balance (default-to u0 (map-get? user-reservation-balance tx-sender)))
+    (current-for-rent (get hours (default-to {hours: u0, price: u0} (map-get? workspace-for-rent {user: tx-sender}))))
+    (new-for-rent (+ hours current-for-rent))
+  )
+    (asserts! (> hours u0) err-invalid-duration) ;; Ensure hours are greater than 0
+    (asserts! (> price u0) err-invalid-price) ;; Ensure price is greater than 0
+    (asserts! (>= current-balance new-for-rent) err-not-enough-space)
+    (try! (update-workspace-reservation (to-int hours)))
+    (map-set workspace-for-rent {user: tx-sender} {hours: new-for-rent, price: price})
+    (ok true)))
+
+;; Remove workspace from rent
+(define-public (remove-workspace-from-rent (hours uint))
+  (let (
+    (current-for-rent (get hours (default-to {hours: u0, price: u0} (map-get? workspace-for-rent {user: tx-sender}))))
+  )
+    (asserts! (>= current-for-rent hours) err-not-enough-space)
+    (try! (update-workspace-reservation (to-int (- hours))))
+    (map-set workspace-for-rent {user: tx-sender} 
+             {hours: (- current-for-rent hours), 
+              price: (get price (default-to {hours: u0, price: u0} (map-get? workspace-for-rent {user: tx-sender})))})
+    (ok true)))
+
+;; Rent workspace from user
+(define-public (rent-workspace-from-user (rentee principal) (hours uint))
+  (let (
+    (rental-data (default-to {hours: u0, price: u0} (map-get? workspace-for-rent {user: rentee})))
+    (rental-cost (* hours (get price rental-data)))
+    (commission (calculate-commission rental-cost))
+    (total-cost (+ rental-cost commission))
+    (rentee-reservation (default-to u0 (map-get? user-reservation-balance rentee)))
+    (renter-balance (default-to u0 (map-get? user-stx-balance tx-sender)))
+    (rentee-balance (default-to u0 (map-get? user-stx-balance rentee)))
+    (owner-balance (default-to u0 (map-get? user-stx-balance platform-owner)))
+  )
+    (asserts! (not (is-eq tx-sender rentee)) err-same-user)
+    (asserts! (> hours u0) err-invalid-duration) ;; Ensure hours are greater than 0
+    (asserts! (>= (get hours rental-data) hours) err-not-enough-space)
+    (asserts! (>= rentee-reservation hours) err-not-enough-space)
+    (asserts! (>= renter-balance total-cost) err-not-enough-space)
+
+    ;; Update rentee's reservation balance and for-rent hours
+    (map-set user-reservation-balance rentee (- rentee-reservation hours))
+    (map-set workspace-for-rent {user: rentee} 
+             {hours: (- (get hours rental-data) hours), price: (get price rental-data)})
+
+    ;; Update renter's STX and reservation balance
+    (map-set user-stx-balance tx-sender (- renter-balance total-cost))
+    (map-set user-reservation-balance tx-sender (+ (default-to u0 (map-get? user-reservation-balance tx-sender)) hours))
+
+    ;; Update rentee's and platform owner's STX balance
+    (map-set user-stx-balance rentee (+ rentee-balance rental-cost))
+    (map-set user-stx-balance platform-owner (+ owner-balance commission))
+
+    (ok true)))
+
+;; Refund reservation
+(define-public (refund-reservation (hours uint))
+  (let (
+    (user-reservation (default-to u0 (map-get? user-reservation-balance tx-sender)))
+    (refund-amount (calculate-refund hours))
+    (platform-stx-balance (default-to u0 (map-get? user-stx-balance platform-owner)))
+  )
+    (asserts! (> hours u0) err-invalid-duration) ;; Ensure hours are greater than 0
+    (asserts! (>= user-reservation hours) err-not-enough-space)
+    (asserts! (>= platform-stx-balance refund-amount) err-refund-failed)
+
+    ;; Update user's reservation balance
+    (map-set user-reservation-balance tx-sender (- user-reservation hours))
+
+    ;; Refund the amount to the user
+    (map-set user-stx-balance tx-sender (+ refund-amount))
+
+    (ok true)))
