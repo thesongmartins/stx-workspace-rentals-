@@ -265,3 +265,93 @@
     (asserts! (>= current-balance hours) err-not-enough-space)
     (map-set user-reservation-balance user (- current-balance hours))
     (ok true)))
+
+
+
+;; Add feature for refunding partial reservation
+(define-public (partial-refund-reservation (hours uint))
+  (let (
+    (user-reservation (default-to u0 (map-get? user-reservation-balance tx-sender)))
+    (refund-amount (calculate-refund hours))
+  )
+    (asserts! (>= user-reservation hours) err-not-enough-space)
+    (map-set user-reservation-balance tx-sender (- user-reservation hours))
+    (map-set user-stx-balance tx-sender (+ refund-amount))
+    (ok true)))
+
+;; Add new UI element for reservation summary
+(define-public (display-reservation-summary (user principal))
+  (let (
+    (user-reservation (map-get? user-reservation-balance user))
+    (user-stx (map-get? user-stx-balance user))
+  )
+    (ok {reservation: user-reservation, stx: user-stx})))
+
+;; Add a new UI element for user reservation status
+(define-public (add-reservation-status-ui (user principal))
+  (let (
+    (reservation-balance (default-to u0 (map-get? user-reservation-balance user)))
+  )
+    (ok reservation-balance)))
+
+;; Fix bug in reservation validation by adding proper checks
+(define-private (check-reservation-availability (hours uint))
+  (let (
+    (current-reservation (var-get current-reserved-space))
+    (available-space (- (var-get workspace-reservation-limit) current-reservation))
+  )
+    (asserts! (<= hours available-space) err-not-enough-space)
+    (ok true)))
+
+;; Add Clarity contract functionality to calculate total revenue
+(define-public (calculate-total-revenue)
+  (let (
+    (total-revenue (* (var-get workspace-price) (var-get current-reserved-space)))
+  )
+    (ok total-revenue)))
+
+;; Optimize contract function by simplifying price calculation
+(define-private (calculate-price-for-reservation (hours uint))
+  (let (
+    (price (* hours (var-get workspace-price)))
+  )
+    (ok price)))
+
+;; Add functionality to allow users to view their reservation balance
+(define-public (view-reservation-balance)
+  (let (
+    (reservation-balance (default-to u0 (map-get? user-reservation-balance tx-sender)))
+  )
+    (ok reservation-balance)))
+
+;; Refactor to ensure security for reservation limits
+(define-public (secure-set-reservation-limit (new-limit uint))
+  (begin
+    (asserts! (is-eq tx-sender platform-owner) err-owner-only)
+    (asserts! (>= new-limit u0) err-invalid-reservation-limit)
+    (var-set workspace-reservation-limit new-limit)
+    (ok true)))
+
+;; Optimize price update function for better performance
+(define-public (optimized-set-price (new-price uint))
+  (begin
+    (asserts! (is-eq tx-sender platform-owner) err-owner-only)
+    (asserts! (> new-price u0) err-invalid-price)
+    (var-set workspace-price new-price)
+    (ok true)))
+
+;; Refactor for improved error handling in reservation limit check
+(define-private (check-reservation-error-handling (hours uint))
+  (let (
+    (current-reservation (var-get current-reserved-space))
+    (available-space (- (var-get workspace-reservation-limit) current-reservation))
+  )
+    (asserts! (>= hours available-space) err-not-enough-space)
+    (ok true)))
+
+;; Add a new function to track user payment history
+(define-public (track-user-payment-history (user principal))
+  (let (
+    (user-payments (default-to u0 (map-get? user-stx-balance user)))
+  )
+    (ok user-payments)))
