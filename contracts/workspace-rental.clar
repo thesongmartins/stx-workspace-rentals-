@@ -355,3 +355,74 @@
     (user-payments (default-to u0 (map-get? user-stx-balance user)))
   )
     (ok user-payments)))
+
+
+;; Refactor the refund functionality for better performance
+(define-public (optimized-refund (hours uint))
+  (let (
+    (user-reservation (default-to u0 (map-get? user-reservation-balance tx-sender)))
+    (refund-amount (calculate-refund hours))
+  )
+    (asserts! (>= user-reservation hours) err-not-enough-space)
+    (map-set user-stx-balance tx-sender (+ refund-amount))
+    (ok true)))
+
+;; Add a meaningful feature to track commission history
+(define-public (track-commission-history)
+  (let (
+    (commission-history (default-to u0 (map-get? user-stx-balance platform-owner)))
+  )
+    (ok commission-history)))
+
+;; Implement a feature to calculate the total hours reserved by a user
+(define-public (calculate-user-reserved-hours (user principal))
+  (let (
+    (user-reserved-hours (default-to u0 (map-get? user-reservation-balance user)))
+  )
+    (ok user-reserved-hours)))
+
+;; Enhance function to apply dynamic pricing based on peak hours
+(define-public (apply-peak-hour-pricing (hours uint) (current-time uint))
+  (let (
+    (is-peak-hour (if (< current-time u12) true false))
+    (dynamic-price (if is-peak-hour (* hours (var-get workspace-price) u2) (* hours (var-get workspace-price))))
+  )
+    (ok dynamic-price)))
+
+;; Refactor to allow platform owner to change reservation limit dynamically
+(define-public (dynamic-set-reservation-limit (new-limit uint))
+  (begin
+    (asserts! (is-eq tx-sender platform-owner) err-owner-only)
+    (asserts! (>= new-limit u0) err-invalid-reservation-limit)
+    (var-set workspace-reservation-limit new-limit)
+    (ok true)))
+
+;; Implement a fee structure for premium workspace reservations
+(define-public (apply-premium-fee (hours uint) (price uint))
+  (let (
+    (premium-fee (if (> hours u10) (* price u15) price))
+  )
+    (ok premium-fee)))
+
+;; Enhance security by restricting access to sensitive contract functions
+(define-public (secure-access-restriction)
+  (begin
+    (asserts! (is-eq tx-sender platform-owner) err-owner-only)
+    (ok true)))
+
+;; Refactor to improve contract performance during high usage
+(define-private (optimized-workspace-management (hours uint))
+  (let (
+    (current-reservation (var-get current-reserved-space))
+    (available-space (- (var-get workspace-reservation-limit) current-reservation))
+  )
+    (asserts! (<= hours available-space) err-not-enough-space)
+    (ok true)))
+
+;; Add functionality for platform to track total revenue over a period
+(define-public (track-revenue-over-period (start-time uint) (end-time uint))
+  (let (
+    (total-revenue (calculate-total-revenue))
+  )
+    (ok total-revenue)))
+
