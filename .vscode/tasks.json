@@ -1,18 +1,13 @@
-
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "check contracts",
-            "group": "test",
-            "type": "shell",
-            "command": "clarinet check"
-        },
-        {
-            "label": "test contracts",
-            "group": "test",
-            "type": "shell",
-            "command": "clarinet test"
-        }
-    ]
+  "version": "2.0.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Run My Project",
+      "console": "",
+      "internalConsoleOptions": "openOnSessionStart"
+    }
+  ],
+  "tasks": []
 }
